@@ -132,7 +132,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-/* ---------------- LOGIN ---------------- */
+/* ---------------- LOGIN (WITH ADMIN BYPASS) ---------------- */
 
 router.post('/login', async (req, res) => {
   const { role, email, password } = req.body;
@@ -157,24 +157,32 @@ router.post('/login', async (req, res) => {
 
     const user = rows[0];
 
-    // SAFE bcrypt check
-    const isMatch = user.password_hash
-      ? await bcrypt.compare(password, user.password_hash)
-      : false;
+    /* ---------------- ADMIN BYPASS ---------------- */
+    if (safeRole === 'admin') {
+      if (email !== 'admin@ojasya.com') {
+        return res.status(401).json({ message: 'Invalid admin email' });
+      }
 
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
+      // SKIP PASSWORD CHECK COMPLETELY
+    } else {
+      /* ---------------- NORMAL USERS CHECK ---------------- */
+      const isMatch = user.password_hash
+        ? await bcrypt.compare(password, user.password_hash)
+        : false;
 
-    // SAFE is_active check (only if column exists)
-    if (
-      safeRole !== 'admin' &&
-      user.is_active !== undefined &&
-      user.is_active === 0
-    ) {
-      return res.status(403).json({
-        message: 'Account deactivated. Contact admin.'
-      });
+      if (!isMatch) {
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+
+      // is_active check only for non-admin
+      if (
+        user.is_active !== undefined &&
+        user.is_active === 0
+      ) {
+        return res.status(403).json({
+          message: 'Account deactivated. Contact admin.'
+        });
+      }
     }
 
     const token = signToken(
